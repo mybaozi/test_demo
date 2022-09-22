@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+    <style>
+        body,#container{
+            width:100vw;
+            height:100vh;
+            margin:0;
+            padding:0;
+        }
+        #msg-list{
+            height:200px;
+            width:400px;
+            border: 1px solid #ddd;
+            padding: 10px;
+            margin-top: 10px;
+            overflow-y: auto;
+        }
+        #msg-list p{
+            max-width: 75%;
+            margin: 0;
+            clear:both;
+            word-break:break-all;
+        }
+    </style>
+    
+</head>
+<body>
+    <!-- <div id="container">
+    </div> -->
+    <div>用户：<span id="user-name"></span></div>
+    <input type="text" id="input">
+    <button id="btn">发送</button>
+    <div id="msg-list">
+        
+    </div>
+    
+    <canvas id="canvas" width="800" height="500"></canvas>
+    <button id="reset">重置</button>
+    <script>
+        // let observer = new MutationObserver((a,b)=>{
+        //     console.log('change',a,b)
+        // })
+        // observer.observe(document.getElementById('container'),{
+        //     attributes: true, childList: true, subtree: true
+        // })
+
+        // fetch('http://172.16.9.114:8085').then(res=>res.json()).then(res=>console.log(res))
+        
+        function connectServer(){
+
+            let user = location.search.slice(1).split('&').find(item=>item.search(/^user=/)!==-1).split('=')[1];
+            document.getElementById('user-name').innerHTML = user;
+            let ws = new WebSocket('ws://172.16.8.30:8181')
+            let draw = initCanvas(ws);
+
+            ws.onopen = function(){
+                console.log('连接成功')
+            }
+            ws.onmessage = function(msg){
+                // console.log('接收到：',JSON.parse(msg.data),msg)
+                if(JSON.parse(msg.data) instanceof Array){
+                    let msgList = document.getElementById('msg-list');
+                    let list = JSON.parse(msg.data);
+                    let html = '';
+                    list.forEach(item=>{
+                        if(item.user === user){
+                            html += `
+                                <p style="float:right">${item.user}:${item.msg}</p>
+                            `
+                        }else{
+                            html += `
+                                <p>${item.user}:${item.msg}</p>
+                            `
+                        }
+                    })
+                    msgList.innerHTML = html;
+                    msgList.scrollTo(0,100000)
+                }else{
+                    draw(JSON.parse(msg.data))
+                }
+            }
+            document.getElementById('input').addEventListener('keydown',function(e){
+                if(e.keyCode === 13)send()
+            })
+            document.getElementById('btn').addEventListener('click',send)
+            function send(){
+                let input = document.getElementById('input');
+                let value = input.value;
+                if(!value) return;
+                let params = {
+                    data: {
+                        user: user,
+                        msg:value,
+                    },
+                    type: 'text'
+    
+                }
+                ws.send(JSON.stringify(params));
+                input.value = '';
+            }
+
+        }
+        connectServer();
+        function initCanvas(ws){
+                let canvas = document.getElementById('canvas');
+                let ctx = canvas.getContext('2d');
+                let loading = false;
+                document.getElementById('reset').addEventListener('click',function(){
+                    ctx.clearRect(0,0,800,500)
+                })
+                canvas.addEventListener('mousedown',e => {
+                    loading = true;
+                    let x = e.offsetX;
+                    let y = e.offsetY;
+                    ctx.beginPath();
+                    ctx.moveTo(x,y)
+                    let params = {
+                        type: 'canvas',
+                        ctxType: 0,
+                        x,
+                        y,
+                    }
+                    ws.send(JSON.stringify(params))
+                })
+                canvas.addEventListener('mousemove',e => {
+                    if(!loading)return;
+                    let x = e.offsetX;
+                    let y = e.offsetY;
+                    ctx.lineTo(x,y)
+                    ctx.stroke();
+                    let params = {
+                        type: 'canvas',
+                        ctxType: 1,
+                        x,
+                        y,
+                    }
+                    ws.send(JSON.stringify(params))
+                })
+                
+                canvas.addEventListener('mouseup',e => {
+                    loading = false;
+                    ctx.closePath()
+                    let params = {
+                        type: 'canvas',
+                        ctxType: 2,
+                    }
+                    ws.send(JSON.stringify(params))
+        
+                })
+                
+                return function(config){
+                    let { x,y,ctxType } = config;
+                    if(ctxType === 0){
+                        ctx.beginPath();
+                        ctx.moveTo(x,y)
+                    }else if(ctxType === 1){
+                        ctx.lineTo(x,y)
+                        ctx.stroke();
+                    }else if(ctxType === 2){
+                        ctx.closePath()
+                    }
+                }
+        }
+       
+    </script>
+    <!-- <script>
+        function createCanvas(){
+            let canvas = document.createElement('canvas');
+            let container = document.getElementById('container')
+            canvas.width = container.getBoundingClientRect().width;
+            canvas.height = container.getBoundingClientRect().height;
+            document.getElementById('container').appendChild(canvas);
+            let ctx = canvas.getContext('2d');
+            //测试绘制旋转文字的性能
+            // setInterval(drawText, 50);
+            //测试绘制旋转矩形的性能
+            // setInterval(drawRect, 50);
+            let y = 200;
+            let x = 100;
+            let row = 0;
+            let startx = 0;
+            let starty = 100;
+            function drawText() {
+                ctx.font="15px Arial";
+                let textWidth = ctx.measureText('世强_陈志鹏_136****1234').width;
+                for (let i = 0; i <= 200; i ++) {
+                    ctx.save();
+                    ctx.beginPath();
+                    console.log(startx,starty)
+                    rotateContext(ctx, startx, starty, -20);
+                    ctx.fillStyle = '#000';
+                    ctx.fillText("世强_陈志鹏_136****1234", startx, starty);
+                    ctx.restore();
+                    if(startx >= canvas.width){
+                        startx = 0;
+                        starty += y;
+                    }else{
+                        startx += x + textWidth;
+                    }
+                }
+            }
+            //确保是以(x,y)为中心进行旋转，而不是简单的以画布原点旋转
+            function rotateContext(ctx, x, y, degree) {
+                ctx.translate(x, y);
+                ctx.rotate(degree * Math.PI / 180);
+                ctx.translate(-x, -y);
+            }
+            drawText()
+        }
+        createCanvas();
+    </script> -->
+    <!-- <script>
+        const controller = new AbortController();
+        const {signal} = controller;
+        fetch('http://localhost:8085',{signal}).then(res=>{
+            return res.json();
+        }).then(res=>{
+            console.log('response',res)
+        }).catch(err=>{
+            console.log('request is canceled')
+        })
+        controller.abort();
+    </script> -->
+</body>
+</html>
